@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Додаткові кастомні стилі */
+body {
+  font-family: 'Inter', sans-serif;
+}
