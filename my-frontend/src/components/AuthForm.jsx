@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 
-const AuthForm = ({ onSubmit, isRegister = false, errorMessage }) => {
+const AuthForm = ({ onSubmit, isRegister = false, errorMessage = '' }) => {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
-    password: '',
+    password: ''
   });
 
-  const handleChange = e => {
+  const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = e => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit(formData);
   };
@@ -19,7 +19,7 @@ const AuthForm = ({ onSubmit, isRegister = false, errorMessage }) => {
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-md p-6 max-w-md mx-auto space-y-4">
       <h2 className="text-2xl font-semibold text-gray-800 text-center">
-        {isRegister ? 'Register' : 'Login'}
+        {isRegister ? 'Реєстрація' : 'Вхід'}
       </h2>
 
       {errorMessage && (
@@ -28,49 +28,50 @@ const AuthForm = ({ onSubmit, isRegister = false, errorMessage }) => {
         </div>
       )}
 
+      {/* Поле "Ім'я користувача" тільки при реєстрації */}
       {isRegister && (
         <div>
-          <label className="block mb-1 text-gray-700">Username</label>
-          <input
+          <label className="block mb-1 text-gray-700">Ім&rsquo;я користувача</label>
+          <input 
             name="username"
             type="text"
             value={formData.username}
             onChange={handleChange}
             className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
-            required
+            required 
           />
         </div>
       )}
 
       <div>
-        <label className="block mb-1 text-gray-700">Email</label>
-        <input
+        <label className="block mb-1 text-gray-700">Електронна пошта</label>
+        <input 
           name="email"
           type="email"
           value={formData.email}
           onChange={handleChange}
           className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
-          required
+          required 
         />
       </div>
 
       <div>
-        <label className="block mb-1 text-gray-700">Password</label>
-        <input
+        <label className="block mb-1 text-gray-700">Пароль</label>
+        <input 
           name="password"
           type="password"
           value={formData.password}
           onChange={handleChange}
           className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
-          required
+          required 
         />
       </div>
 
-      <button
-        type="submit"
+      <button 
+        type="submit" 
         className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-6 py-3 transition"
       >
-        {isRegister ? 'Register' : 'Login'}
+        {isRegister ? 'Зареєструватися' : 'Увійти'}
       </button>
     </form>
   );

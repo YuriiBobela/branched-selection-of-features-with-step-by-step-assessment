@@ -41,4 +41,26 @@ router.post(
   featureController.classifyImage  // calls model_train.py (predict mode)
 );
 
+router.post('/api/predict', upload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No image provided" });
+  }
+  // Конвертуємо зображення у base64
+  const imgB64 = req.file.buffer.toString('base64');
+  const py = spawn('python', ['scripts/predict.py']);
+  py.stdin.write(JSON.stringify({ image: imgB64 }));
+  py.stdin.end();
+
+  let output = "";
+  py.stdout.on('data', chunk => output += chunk.toString());
+  py.stdout.on('close', () => {
+    try {
+      const result = JSON.parse(output);
+      res.json(result);
+    } catch {
+      res.status(500).json({ error: "Prediction failed" });
+    }
+  });
+});
+
 module.exports = router;

@@ -4,77 +4,79 @@ const path = require('path');
 const AnalysisResult = require('../models/AnalysisResult');
 
 /**
- * Analyze images to compute feature importance using mutual information (existing functionality).
- * Expects `req.files` (images in memory) and `req.body.labels` (JSON array of labels).
- * Returns JSON with features and their MI scores.
+ * Analyze images to compute feature importance using mutual information (Classic & Deep features).
+ * Expects `req.files` (images) and `req.body.labels` (JSON string).
+ * Returns JSON: { features_classical, mi_classical, features_deep, mi_deep }.
  */
 exports.analyzeImages = (req, res) => {
-  console.log('⚡ analyzeImages called, files:', req.files.length);
+  console.log('⚡ analyzeImages called, files:', req.files?.length);
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'Не надано зображень для аналізу' });
+  }
+  if (!req.body.labels) {
+    return res.status(400).json({ error: 'Не вказано мітки (labels)' });
+  }
+
   let imagesB64, labels;
   try {
-    // Convert image buffers to base64 strings
     imagesB64 = req.files.map(f => f.buffer.toString('base64'));
-    // Parse labels from request (expected as JSON string in form-data)
     labels = JSON.parse(req.body.labels);
   } catch (e) {
     console.error('❌ Invalid input:', e);
-    return res.status(400).json({ error: 'Неправильний формат даних' }); // "Incorrect data format"
+    return res.status(400).json({ error: 'Неправильний формат даних' });
   }
 
   const payload = JSON.stringify({ images: imagesB64, labels });
-  const scriptPath = path.join(__dirname, './scripts/main_b64.py');
+  const scriptPath = path.join(__dirname, '../scripts/main_b64.py');
   const py = spawn('python', [scriptPath], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-  // 1) Handle Python spawn error
   py.on('error', err => {
     console.error('❌ Cannot start Python:', err);
-    return res.status(500).json({ error: 'Не вдалося запустити Python' }); // "Failed to start Python"
+    return res.status(500).json({ error: 'Не вдалося запустити Python' });
   });
-  // 2) Handle stdin error (e.g., broken pipe)
   py.stdin.on('error', err => {
-    console.warn('⚠️  STDIN error:', err);
-    // (No response sent here, just log the warning)
+    console.warn('⚠️ STDIN error:', err);
   });
-  // 3) Collect data from stdout/stderr
+
   let outData = '', errData = '';
   py.stdout.on('data', chunk => { outData += chunk.toString(); });
   py.stderr.on('data', chunk => { errData += chunk.toString(); });
-  // 4) On process close, handle result
+
   py.on('close', code => {
     console.log(`🐍 Python process exited with code ${code}`);
+    console.log('📤 Python output:', outData);
     if (code !== 0) {
       console.error('Python stderr:', errData);
       return res.status(500).json({ error: errData.trim() || 'Python script error' });
     }
     try {
       const result = JSON.parse(outData);
-      // Return mutual information analysis result to client
       return res.json(result);
     } catch (e) {
       console.error('❌ Invalid JSON from Python:', outData);
-      return res.status(500).json({ error: 'Неочікуваний формат відповіді' }); // "Unexpected response format"
+      return res.status(500).json({ error: 'Неочікуваний формат відповіді' });
     }
   });
-  // 5) Send data to Python process
+
   try {
     py.stdin.write(payload);
     py.stdin.end();
   } catch (e) {
-    console.warn('⚠️  Failed to write to Python stdin:', e);
-    // No response sent here since on('close') will handle if process exits
+    console.warn('⚠️ Failed to write to Python stdin:', e);
   }
 };
 
 /**
- * Perform step-by-step feature selection using the branch_selection.py script.
- * Expects `req.files` (images in memory) and `req.body.labels` (JSON array of labels).
- * Returns JSON with selected features and accuracy at each step.
- * Also saves the selection results to MongoDB (selected features, accuracies, final accuracy).
+ * Step-by-step feature selection using branch_selection.py.
+ * Saves results to MongoDB and returns { selected_features, accuracies, final_accuracy }.
  */
 exports.selectFeatures = (req, res) => {
-  console.log('⚡ selectFeatures called, files:', req.files.length);
+  console.log('⚡ selectFeatures called, files:', req.files?.length);
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: 'No images uploaded for feature selection' });
+  }
+  if (!req.body.labels) {
+    return res.status(400).json({ error: 'Не вказано мітки (labels)' });
   }
 
   let imagesB64, labels;
@@ -87,7 +89,7 @@ exports.selectFeatures = (req, res) => {
   }
 
   const payload = JSON.stringify({ images: imagesB64, labels });
-  const scriptPath = path.join(__dirname, './scripts/branch_selection.py');
+  const scriptPath = path.join(__dirname, '../scripts/branch_selection.py');
   const py = spawn('python', [scriptPath], { stdio: ['pipe', 'pipe', 'pipe'] });
 
   py.on('error', err => {
@@ -95,7 +97,7 @@ exports.selectFeatures = (req, res) => {
     return res.status(500).json({ error: 'Не вдалося запустити Python скрипт' });
   });
   py.stdin.on('error', err => {
-    console.warn('⚠️  STDIN error (branch_selection):', err);
+    console.warn('⚠️ STDIN error (branch_selection):', err);
   });
 
   let outData = '', errData = '';
@@ -104,6 +106,7 @@ exports.selectFeatures = (req, res) => {
 
   py.on('close', code => {
     console.log(`🐍 branch_selection.py exited with code ${code}`);
+    console.log('📤 branch_selection output:', outData);
     if (code !== 0) {
       console.error('Python stderr (branch_selection):', errData);
       return res.status(500).json({ error: errData.trim() || 'Python script error' });
@@ -115,45 +118,44 @@ exports.selectFeatures = (req, res) => {
       console.error('❌ Invalid JSON from branch_selection.py:', outData);
       return res.status(500).json({ error: 'Неочікуваний формат відповіді' });
     }
-    // Save feature selection results in MongoDB
     AnalysisResult.create({
       user: req.user._id,
-      selectedFeatures: result.selected_features,   // array of feature names selected
-      accuracies: result.accuracies,               // array of accuracies at each step
-      finalAccuracy: result.final_accuracy         // final accuracy after selecting all features
+      selectedFeatures: result.selected_features,
+      accuracies: result.accuracies,
+      finalAccuracy: result.final_accuracy
     })
-      .then(doc => {
-        console.log('✅ Feature selection result saved:', doc._id);
-        return res.json(result);  // return the result JSON (features and accuracies) to client
-      })
-      .catch(err => {
-        console.error('❌ Failed to save feature selection result:', err);
-        return res.status(500).json({ error: 'Не вдалося зберегти результат аналізу' }); // "Failed to save analysis result"
-      });
+    .then(doc => {
+      console.log('✅ Feature selection result saved:', doc._id);
+      return res.json(result);
+    })
+    .catch(err => {
+      console.error('❌ Failed to save feature selection result:', err);
+      return res.status(500).json({ error: 'Не вдалося зберегти результат аналізу' });
+    });
   });
 
   try {
     py.stdin.write(payload);
     py.stdin.end();
   } catch (e) {
-    console.warn('⚠️  Failed to write to Python stdin (branch_selection):', e);
+    console.warn('⚠️ Failed to write to Python stdin (branch_selection):', e);
   }
 };
 
 /**
- * Train a global classification model using selected features via model_train.py script.
- * Expects `req.files` (training images) and `req.body.labels` (JSON array of labels).
- * Optionally can accept `req.body.selected` (JSON array of feature names to use); 
- * if not provided, the last saved selection for the user is used.
- * Saves the model's final accuracy in MongoDB and returns it in the response.
+ * Train a global classification model using train_model.py.
+ * Saves final accuracy to MongoDB and returns training results to client.
  */
 exports.trainModel = async (req, res) => {
-  console.log('⚡ trainModel called, files:', req.files.length);
+  console.log('⚡ trainModel called, files:', req.files?.length);
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: 'No images uploaded for training' });
   }
+  if (!req.body.labels) {
+    return res.status(400).json({ error: 'Не вказано мітки (labels)' });
+  }
 
-  let imagesB64, labels;
+  let imagesB64, labels, selectedFeatures;
   try {
     imagesB64 = req.files.map(f => f.buffer.toString('base64'));
     labels = JSON.parse(req.body.labels);
@@ -161,43 +163,36 @@ exports.trainModel = async (req, res) => {
     console.error('❌ Invalid input (trainModel):', e);
     return res.status(400).json({ error: 'Неправильний формат даних' });
   }
-
-  // Determine which features to use for training
-  let selectedFeatures = null;
   if (req.body.selected) {
     try {
-      selectedFeatures = JSON.parse(req.body.selected);  // expecting an array of feature names if provided
+      selectedFeatures = JSON.parse(req.body.selected);
     } catch (e) {
-      console.warn('⚠️  Invalid selected features JSON:', e);
-      selectedFeatures = null;
+      console.warn('⚠️ Invalid selected features JSON:', e);
     }
   }
   if (!selectedFeatures) {
-    // If no features specified in request, use the most recent selection result from DB
     try {
-      const lastAnalysis = await AnalysisResult.findOne({ user: req.user._id })
-        .sort({ createdAt: -1 })
-        .exec();
-      if (!lastAnalysis || !lastAnalysis.selectedFeatures || lastAnalysis.selectedFeatures.length === 0) {
-        return res.status(400).json({ error: 'Спочатку виконайте вибір ознак' }); // "Perform feature selection first"
+      const last = await AnalysisResult.findOne({ user: req.user._id }).sort({ createdAt: -1 });
+      if (!last || !last.selectedFeatures?.length) {
+        return res.status(400).json({ error: 'Спочатку виконайте вибір ознак' });
       }
-      selectedFeatures = lastAnalysis.selectedFeatures;
+      selectedFeatures = last.selectedFeatures;
     } catch (dbErr) {
       console.error('❌ DB lookup error (trainModel):', dbErr);
-      return res.status(500).json({ error: 'Не вдалося отримати вибрані ознаки' }); // "Failed to retrieve selected features"
+      return res.status(500).json({ error: 'Не вдалося отримати вибрані ознаки' });
     }
   }
 
   const payload = JSON.stringify({ images: imagesB64, labels, selected: selectedFeatures });
-  const scriptPath = path.join(__dirname, './scripts/model_train.py');
+  const scriptPath = path.join(__dirname, '../scripts/train_model.py');
   const py = spawn('python', [scriptPath, 'train'], { stdio: ['pipe', 'pipe', 'pipe'] });
 
   py.on('error', err => {
-    console.error('❌ Cannot start Python (model_train train):', err);
+    console.error('❌ Cannot start Python (train):', err);
     return res.status(500).json({ error: 'Не вдалося запустити Python скрипт' });
   });
   py.stdin.on('error', err => {
-    console.warn('⚠️  STDIN error (model_train train):', err);
+    console.warn('⚠️ STDIN error (train):', err);
   });
 
   let outData = '', errData = '';
@@ -205,34 +200,31 @@ exports.trainModel = async (req, res) => {
   py.stderr.on('data', chunk => { errData += chunk.toString(); });
 
   py.on('close', code => {
-    console.log(`🐍 model_train.py (train) exited with code ${code}`);
+    console.log(`🐍 train_model.py (train) exited with code ${code}`);
+    console.log('📤 train output:', outData);
     if (code !== 0) {
-      console.error('Python stderr (model_train train):', errData);
+      console.error('Python stderr (train):', errData);
       return res.status(500).json({ error: errData.trim() || 'Python training error' });
     }
     let result;
     try {
-      result = JSON.parse(outData);  // expect { accuracy: number }
+      result = JSON.parse(outData);
     } catch (e) {
-      console.error('❌ Invalid JSON from model_train (train):', outData);
+      console.error('❌ Invalid JSON from train_model (train):', outData);
       return res.status(500).json({ error: 'Неочікуваний формат відповіді' });
     }
-    const finalAcc = result.accuracy;
-    // Update the latest AnalysisResult with the final accuracy of the trained model
+    const finalAcc = result.cnn_accuracy;
     AnalysisResult.findOneAndUpdate(
       { user: req.user._id },
       { finalAccuracy: finalAcc },
       { sort: { createdAt: -1 } }
     )
       .then(doc => {
-        if (doc) {
-          console.log('✅ Model training result updated (id=%s, accuracy=%s)', doc._id, finalAcc);
-        }
-        return res.json(result);  // return { accuracy: ... } to client
+        console.log('✅ Model training result updated:', doc?._id, finalAcc);
+        return res.json(result);
       })
       .catch(err => {
-        console.error('⚠️  Failed to update final accuracy in DB:', err);
-        // Even if DB update fails, return the result to the client
+        console.error('⚠️ Failed to update final accuracy:', err);
         return res.json(result);
       });
   });
@@ -241,14 +233,13 @@ exports.trainModel = async (req, res) => {
     py.stdin.write(payload);
     py.stdin.end();
   } catch (e) {
-    console.warn('⚠️  Failed to write to Python stdin (model_train train):', e);
+    console.warn('⚠️ Failed to write to Python stdin (train):', e);
   }
 };
 
 /**
- * Classify a new image using the trained global model via model_train.py script (predict mode).
- * Expects `req.file` (single image in memory). Returns JSON with the predicted label.
- * Also logs the classification result to MongoDB.
+ * Classify a new image using the trained model.
+ * Expects `req.file` and returns { predicted_label }.
  */
 exports.classifyImage = (req, res) => {
   console.log('⚡ classifyImage called');
@@ -256,18 +247,17 @@ exports.classifyImage = (req, res) => {
     return res.status(400).json({ error: 'No image provided for classification' });
   }
 
-  // Convert the single image buffer to base64
   const imageB64 = req.file.buffer.toString('base64');
   const payload = JSON.stringify({ image: imageB64 });
-  const scriptPath = path.join(__dirname, './scripts/model_train.py');
+  const scriptPath = path.join(__dirname, '../scripts/train_model.py');
   const py = spawn('python', [scriptPath, 'predict'], { stdio: ['pipe', 'pipe', 'pipe'] });
 
   py.on('error', err => {
-    console.error('❌ Cannot start Python (model_train predict):', err);
+    console.error('❌ Cannot start Python (predict):', err);
     return res.status(500).json({ error: 'Не вдалося запустити Python скрипт' });
   });
   py.stdin.on('error', err => {
-    console.warn('⚠️  STDIN error (model_train predict):', err);
+    console.warn('⚠️ STDIN error (predict):', err);
   });
 
   let outData = '', errData = '';
@@ -275,28 +265,22 @@ exports.classifyImage = (req, res) => {
   py.stderr.on('data', chunk => { errData += chunk.toString(); });
 
   py.on('close', code => {
-    console.log(`🐍 model_train.py (predict) exited with code ${code}`);
+    console.log(`🐍 train_model.py (predict) exited with code ${code}`);
+    console.log('📤 predict output:', outData);
     if (code !== 0) {
-      console.error('Python stderr (model_train predict):', errData);
+      console.error('Python stderr (predict):', errData);
       return res.status(500).json({ error: errData.trim() || 'Python classification error' });
     }
     let result;
     try {
-      result = JSON.parse(outData);  // expect { predicted_label: someValue }
+      result = JSON.parse(outData);
     } catch (e) {
-      console.error('❌ Invalid JSON from model_train (predict):', outData);
+      console.error('❌ Invalid JSON from train_model (predict):', outData);
       return res.status(500).json({ error: 'Неочікуваний формат відповіді' });
     }
     const predicted = result.predicted_label;
-    // Save classification result in MongoDB (for record-keeping)
-    AnalysisResult.create({
-      user: req.user._id,
-      predictedLabel: predicted
-    }).catch(err => {
-      console.error('⚠️  Failed to save classification result:', err);
-      // (Non-critical: we continue even if save fails)
-    });
-    // Return the prediction result to client
+    AnalysisResult.create({ user: req.user._id, predictedLabel: predicted })
+      .catch(err => console.error('⚠️ Failed to save classification result:', err));
     return res.json(result);
   });
 
@@ -304,6 +288,6 @@ exports.classifyImage = (req, res) => {
     py.stdin.write(payload);
     py.stdin.end();
   } catch (e) {
-    console.warn('⚠️  Failed to write to Python stdin (model_train predict):', e);
+    console.warn('⚠️ Failed to write to Python stdin (predict):', e);
   }
 };

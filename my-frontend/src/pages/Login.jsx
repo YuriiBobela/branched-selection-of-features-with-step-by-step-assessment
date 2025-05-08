@@ -1,25 +1,30 @@
-// src/pages/Login.jsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AuthForm from '../components/AuthForm';
 import useAuthStore from '../store/useAuthStore';
-import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
-  const login = useAuthStore((state) => state.login);
-  const navigate = useNavigate();
+  const login = useAuthStore(state => state.login);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const handleLogin = async (formData) => {
     try {
       setError('');
-      await login(formData);       // кине помилку, якщо невірно
-      navigate('/analysis');      // навігація — лише при успіху
+      await login(formData);            // викликаємо action login з zustand
+      navigate('/analysis', { replace: true });
     } catch (e) {
-      setError(e.message);         // показуємо повідомлення в AuthForm
+      // Отримуємо повідомлення про помилку (якщо є з бекенду)
+      const msg = e.response?.data?.error || e.message || 'Помилка входу';
+      setError(msg);
     }
   };
 
-  return <AuthForm onSubmit={handleLogin} errorMessage={error} />;
+  return (
+    <div className="flex justify-center items-center min-h-screen bg-gray-50">
+      <AuthForm onSubmit={handleLogin} errorMessage={error} />
+    </div>
+  );
 };
 
 export default Login;

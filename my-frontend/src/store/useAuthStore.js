@@ -1,5 +1,4 @@
-// src/store/useAuthStore.js
-import create from 'zustand';
+import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { loginUser, registerUser } from '../lib/api';
 
@@ -7,21 +6,30 @@ const useAuthStore = create(persist(
   (set) => ({
     token: null,
     user: null,
-    login: async (data) => {
-      const res = await loginUser(data);
+    // Екшен для логіну
+    login: async (credentials) => {
+      const res = await loginUser(credentials);
       const { token, ...user } = res.data;
       set({ token, user });
+      // Зберігаємо токен окремо для інтерцептора axios
+      localStorage.setItem('token', token);
     },
-    register: async (data) => {
-      const res = await registerUser(data);
+    // Екшен для реєстрації
+    register: async (credentials) => {
+      const res = await registerUser(credentials);
       const { token, ...user } = res.data;
       set({ token, user });
+      localStorage.setItem('token', token);
     },
-    logout: () => set({ token: null, user: null }),
+    // Екшен для виходу
+    logout: () => {
+      set({ token: null, user: null });
+      localStorage.removeItem('token');
+    }
   }),
   {
-    name: 'auth-storage',      // ключ у localStorage
-    getStorage: () => localStorage,
+    name: 'auth-storage', // ключ для localStorage, під яким зберігається стан
+    getStorage: () => localStorage
   }
 ));
 
