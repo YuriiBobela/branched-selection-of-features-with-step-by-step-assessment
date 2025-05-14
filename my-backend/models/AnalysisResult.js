@@ -1,14 +1,28 @@
-// models/AnalysisResult.js
+// backend/models/AnalysisResult.js (Mongoose Schema)
 const mongoose = require('mongoose');
 
-const analysisResultSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  selectedFeatures: { type: [String], default: [] },  // features selected (e.g., ['avg_r','std_gray', ...])
-  accuracies: { type: [Number], default: [] },        // accuracy at each step of feature selection
-  finalAccuracy: { type: Number },                    // final accuracy of the model after training
-  predictedLabel: { type: Number },                   // predicted label for classification results (if applicable)
-  resultData: { type: mongoose.Schema.Types.Mixed },  // (optional) any additional result data 
-  createdAt: { type: Date, default: Date.now }
+const AnalysisResultSchema = new mongoose.Schema({
+  userId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true 
+  },
+  features: { 
+    type: [String],       // список назв ознак
+    required: true 
+  },
+  miScores: { 
+    type: [Number],       // список значень MI відповідно до ознак
+    required: true 
+  },
+  note: {
+    type: String,         // опціональна примітка від користувача
+    default: ''
+  },
+  createdAt: { 
+    type: Date,           // дата створення запису
+    default: Date.now 
+  }
 });
 
-module.exports = mongoose.model('AnalysisResult', analysisResultSchema);
+module.exports = mongoose.model('AnalysisResult', AnalysisResultSchema);

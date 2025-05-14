@@ -10,6 +10,7 @@ import FeatureSelection from './pages/FeatureSelection';
 import Train from './pages/Train';
 import PredictPage from './pages/PredictPage';
 import { Toaster } from 'react-hot-toast';
+import AnalysisPage from './pages/AnalysisPage'; // ← додай
 
 const App = () => (
   <BrowserRouter>
@@ -24,6 +25,10 @@ const App = () => (
       <Route 
         path="/analysis" 
         element={<ProtectedRoute><Analysis /></ProtectedRoute>} 
+      />
+      <Route 
+        path="/analysis/result" 
+        element={<ProtectedRoute><AnalysisPage /></ProtectedRoute>} 
       />
       <Route 
         path="/feature-selection" 

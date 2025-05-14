@@ -1,151 +1,116 @@
-#!/usr/bin/env python3
-import sys
-import json
-import base64
-import logging
 
+import sys, json, base64
 import numpy as np
 import cv2
 import torch
 import torchvision.models as models
-import torchvision.transforms as T
-from sklearn.feature_selection import mutual_info_classif
+from sklearn.feature_selection import mutual_info_classif, chi2, f_classif
+from sklearn.preprocessing import MinMaxScaler
 
-# Налаштування логування
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stderr)]
-)
+from torchvision import transforms as T
+import warnings
+warnings.filterwarnings("ignore")
 
 def load_images(b64_list, size=(128, 128)):
-    """Декодує base64 → OpenCV BGR → змінює розмір."""
     imgs = []
-    for i, b64_str in enumerate(b64_list):
-        try:
-            data = base64.b64decode(b64_str)
-            arr = np.frombuffer(data, np.uint8)
-            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            if img is None:
-                raise ValueError("cv2 failed to decode image")
-            img = cv2.resize(img, size)
-            imgs.append(img)
-        except Exception as e:
-            logging.warning(f"Image #{i} decode error: {e}")
+    for b64_str in b64_list:
+        data = base64.b64decode(b64_str)
+        arr = np.frombuffer(data, np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        img = cv2.resize(img, size)
+        imgs.append(img)
     return imgs
 
 def extract_classical_features(images):
-    """Рахує avg R,G,B і std_gray для кожного зображення."""
     feats = []
     for img in images:
-        avg = img.mean(axis=(0,1)).tolist()      # [B,G,R]
+        avg = img.mean(axis=(0, 1)).tolist()
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        feats.append([avg[2], avg[1], avg[0], float(gray.std())])
-    return np.array(feats, dtype=float)
+        std = float(gray.std())
+        feats.append(avg + [std])
+    return np.array(feats), ['avg_b', 'avg_g', 'avg_r', 'std_gray']
 
-def extract_deep_features(images, model, transform):
-    """Пропускає через MobileNetV2 без класифікатора, повертає (N×1280) масив."""
-    deep_feats = []
-    for i, img in enumerate(images):
-        try:
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            tensor = transform(rgb).unsqueeze(0)  # додаємо batch dim
-            with torch.no_grad():
-                feat = model(tensor)
-            deep_feats.append(feat.squeeze().cpu().numpy())
-        except Exception as e:
-            logging.warning(f"Deep feature extraction failed for image #{i}: {e}")
-    return np.vstack(deep_feats) if deep_feats else np.empty((0,1280))
-
-def main():
-    # --- Читання stdin ---
-    raw = sys.stdin.read()
-    if not raw:
-        logging.error("No input provided")
-        print(json.dumps({"error": "No input provided"}), flush=True)
-        sys.exit(1)
-
-    try:
-        data = json.loads(raw)
-        images_b64 = data.get("images", [])
-        labels = np.array(data.get("labels", []), dtype=int)
-    except Exception as e:
-        logging.exception("Failed to parse JSON input")
-        print(json.dumps({"error": f"Invalid JSON input: {e}"}), flush=True)
-        sys.exit(1)
-
-    if len(images_b64) == 0 or labels.size == 0 or labels.size != len(images_b64):
-        msg = "Must provide equal number of images and labels"
-        logging.error(msg)
-        print(json.dumps({"error": msg}), flush=True)
-        sys.exit(1)
-
-    # --- Завантаження і підготовка зображень ---
-    images = load_images(images_b64, size=(128,128))
-    if len(images) != labels.size:
-        msg = "Some images failed to decode"
-        logging.error(msg)
-        print(json.dumps({"error": msg}), flush=True)
-        sys.exit(1)
-
-    # --- Класичні ознаки ---
-    X_classical = extract_classical_features(images)
-    logging.info(f"Extracted classical features: {X_classical.shape}")
-
-    # --- Підготовка моделі MobileNetV2 ---
-    try:
-        base_model = models.mobilenet_v2(pretrained=True)
-    except Exception as e:
-        logging.exception("Failed to load pretrained MobileNetV2")
-        print(json.dumps({"error": f"Model load error: {e}"}), flush=True)
-        sys.exit(1)
-
-    # Прибираємо класифікатор, лишаємо feature extractor
-    feature_extractor = torch.nn.Sequential(*list(base_model.features.children()))
-    pooling = torch.nn.AdaptiveAvgPool2d((1,1))
-    model = torch.nn.Sequential(feature_extractor, pooling, torch.nn.Flatten())
+def extract_deep_features(images):
+    model = models.mobilenet_v2(pretrained=True)
+    model.classifier = torch.nn.Identity()
     model.eval()
-
-    # Трансформації для MobileNetV2
     transform = T.Compose([
         T.ToTensor(),
-        T.Resize((224,224)),
-        T.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+        T.Resize((224, 224)),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
+    deep_feats = []
+    for img in images:
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        tensor = transform(rgb).unsqueeze(0)
+        with torch.no_grad():
+            out = model(tensor).squeeze().numpy()
+        deep_feats.append(out)
+    return np.array(deep_feats)
 
-    # --- Глибокі ознаки ---
-    X_deep = extract_deep_features(images, model, transform)
-    logging.info(f"Extracted deep features: {X_deep.shape}")
 
-    if X_deep.shape[0] == 0:
-        msg = "No deep features extracted"
-        logging.error(msg)
-        print(json.dumps({"error": msg}), flush=True)
-        sys.exit(1)
+def compute_mi(X, y):
+    return mutual_info_classif(X, y, discrete_features='auto')
 
-    # --- Обчислення Mutual Information ---
-    try:
-        mi_classical = mutual_info_classif(X_classical, labels, discrete_features='auto')
-        mi_deep_all = mutual_info_classif(X_deep, labels, discrete_features='auto')
-    except Exception as e:
-        logging.exception("Mutual Information calculation failed")
-        print(json.dumps({"error": f"MI error: {e}"}), flush=True)
-        sys.exit(1)
+def compute_chi2(X, y):
+    X_scaled = MinMaxScaler().fit_transform(X)
+    scores, _ = chi2(X_scaled, y)
+    return scores
 
-    # Топ-10 deep ознак
-    top_n = min(10, X_deep.shape[1])
-    top_idxs = np.argsort(mi_deep_all)[-top_n:][::-1]
-    top_features = [f"deep_{i}" for i in top_idxs.tolist()]
-    top_mi = mi_deep_all[top_idxs].tolist()
+def compute_f_value(X, y):
+    scores, _ = f_classif(X, y)
+    return scores
 
-    # --- Повернення результату ---
-    result = {
-        "features_classical": ["avg_r","avg_g","avg_b","std_gray"],
-        "mi_classical": mi_classical.tolist(),
-        "features_deep": top_features,
-        "mi_deep": top_mi
+def generate_interpretations(features, scores, top_n=3):
+    top_idx = np.argsort(scores)[-top_n:][::-1]
+    texts = []
+    for idx in top_idx:
+        texts.append(f"Ознака '{features[idx]}' має високу інформативність ({scores[idx]:.3f}), що вказує на сильний зв’язок з мітками.")
+    return texts
+
+def main():
+    raw = sys.stdin.read()
+    if not raw:
+        print(json.dumps({"error": "No input"}))
+        return
+    data = json.loads(raw)
+    images = load_images(data.get('images', []))
+    labels = np.array(data.get('labels', []))
+    metric = data.get('metric', 'mi')  # default to mutual information
+
+    classical_feats, classical_names = extract_classical_features(images)
+    deep_feats = extract_deep_features(images)
+    deep_names = [f"deep_{i}" for i in range(deep_feats.shape[1])]
+
+    if metric == 'mi':
+        mi_classical = compute_mi(classical_feats, labels)
+        mi_deep = compute_mi(deep_feats, labels)
+    elif metric == 'chi2':
+        mi_classical = compute_chi2(classical_feats, labels)
+        mi_deep = compute_chi2(deep_feats, labels)
+    elif metric == 'f':
+        mi_classical = compute_f_value(classical_feats, labels)
+        mi_deep = compute_f_value(deep_feats, labels)
+    else:
+        print(json.dumps({"error": "Unsupported metric"}))
+        return
+
+    top_idx = np.argsort(mi_deep)[-10:][::-1]
+    top_features = [deep_names[i] for i in top_idx]
+    top_scores = [mi_deep[i] for i in top_idx]
+    interpretations = generate_interpretations(top_features, top_scores)
+
+    # Фінальний словник з приведенням до чистих типів Python
+    out = {
+        "metric": str(metric),
+        "features_classical": list(map(str, classical_names)),
+        "mi_classical": list(map(float, mi_classical)),
+        "features_deep": list(map(str, top_features)),
+        "mi_deep": list(map(float, top_scores)),
+        "interpretations": list(map(str, interpretations))
     }
-    print(json.dumps(result), flush=True)
+    print(json.dumps(out), flush=True)
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

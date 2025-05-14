@@ -1,42 +1,52 @@
+// src/components/MultiClassUploadForm.jsx
 import React, { useState } from 'react';
 import { analyzeImages } from '../lib/api';
+import { toast } from 'react-hot-toast';
 
-const UploadAndAnalyzeForm = ({ onResult }) => {
-  const [files, setFiles] = useState([]);
-  const [labels, setLabels] = useState([]);
+const MultiClassUploadForm = ({ onResult }) => {
+  const [classes, setClasses] = useState([{ name: '', files: [] }]);
   const [loading, setLoading] = useState(false);
 
-  // Обробник вибору файлів
-  const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    setFiles(selectedFiles);
+  const handleClassNameChange = (index, value) => {
+    const updated = [...classes];
+    updated[index].name = value;
+    setClasses(updated);
   };
 
-  // Обробник введення міток (розділених комою)
-  const handleLabelsChange = (e) => {
-    const labelsArray = e.target.value.split(',').map(l => l.trim()).filter(l => l);
-    setLabels(labelsArray);
+  const handleFileChange = (index, files) => {
+    const updated = [...classes];
+    updated[index].files = Array.from(files);
+    setClasses(updated);
+  };
+
+  const addClass = () => {
+    setClasses([...classes, { name: '', files: [] }]);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Перевірка наявності файлів та відповідності кількості міток
-    if (files.length === 0) {
-      onResult({ error: 'Будь ласка, виберіть хоча б одне зображення.' });
+    const allFiles = [];
+    const labels = [];
+
+    classes.forEach((cls, idx) => {
+      cls.files.forEach(file => {
+        allFiles.push(file);
+        labels.push(idx); // або cls.name якщо імена важливі
+      });
+    });
+
+    if (allFiles.length === 0) {
+      toast.error('Завантажте хоча б одне зображення');
       return;
     }
-    if (labels.length !== files.length) {
-      onResult({ error: 'Кількість міток має відповідати кількості зображень.' });
-      return;
-    }
+
     setLoading(true);
     try {
-      // Формуємо FormData для відправки зображень та міток
       const formData = new FormData();
-      files.forEach(file => formData.append('images', file));
+      allFiles.forEach(file => formData.append('images', file));
       formData.append('labels', JSON.stringify(labels));
       const response = await analyzeImages(formData);
-      onResult(response.data);  // передаємо результат аналізу наверх
+      onResult(response.data);
     } catch (e) {
       const errorMsg = e.response?.data?.error || 'Помилка аналізу';
       onResult({ error: errorMsg });
@@ -46,48 +56,45 @@ const UploadAndAnalyzeForm = ({ onResult }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-4">
-      <div>
-        <label className="block mb-2 font-medium text-gray-700">
-          Оберіть зображення
-        </label>
-        <input 
-          type="file" 
-          multiple 
-          accept="image/*" 
-          onChange={handleFileChange} 
-          className="w-full text-gray-800"
-        />
-      </div>
-      <div>
-        <label className="block mb-2 font-medium text-gray-700">
-          Введіть мітки (через кому)
-        </label>
-        <input 
-          type="text" 
-          onChange={handleLabelsChange} 
-          className="w-full border border-gray-300 rounded-lg p-2"
-          placeholder="Напр. 0, 1, 1, 0"
-        />
-      </div>
-      <button 
-        type="submit" 
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg py(3) px-6 flex items-center justify-center"
+    <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow">
+      <h2 className="text-2xl font-semibold">Завантаження фото по класах</h2>
+      {classes.map((cls, idx) => (
+        <div key={idx} className="border p-4 rounded-lg">
+          <label className="block mb-2 text-sm font-medium text-gray-700">
+            Назва класу #{idx + 1}
+          </label>
+          <input
+            type="text"
+            value={cls.name}
+            onChange={(e) => handleClassNameChange(idx, e.target.value)}
+            placeholder={`Наприклад: Кіт, Собака...`}
+            className="w-full mb-3 border p-2 rounded"
+            required
+          />
+          <input
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={(e) => handleFileChange(idx, e.target.files)}
+            className="w-full"
+          />
+          <p className="text-sm text-gray-500 mt-1">{cls.files.length} зображень вибрано</p>
+        </div>
+      ))}
+
+      <button type="button" onClick={addClass} className="text-blue-600 hover:underline">
+        ➕ Додати ще клас
+      </button>
+
+      <button
+        type="submit"
         disabled={loading}
+        className="bg-indigo-600 text-white w-full py-2 rounded hover:bg-indigo-700"
       >
-        {loading ? (
-          // Відображення індикатора завантаження в кнопці
-          <div className="flex items-center">
-            <svg className="animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-            </svg>
-            Виконується...
-          </div>
-        ) : 'Запустити аналіз'}
+        {loading ? 'Аналізуємо...' : 'Запустити аналіз'}
       </button>
     </form>
   );
 };
 
-export default UploadAndAnalyzeForm;
+export default MultiClassUploadForm;

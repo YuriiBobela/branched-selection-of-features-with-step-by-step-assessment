@@ -17,7 +17,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/data', require('./routes/dataRoutes'));
-app.use('/api/features', require('./routes/featureRoutes'));
+app.use('/api/features', require('./routes/analysis'));
 
 app.use(errorHandler);
 
