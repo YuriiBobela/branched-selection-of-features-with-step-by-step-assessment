@@ -1,172 +1,122 @@
 // src/pages/TrainPage.jsx
-import React, { useState } from 'react';
-import axios from 'axios';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
-import LoadingSpinner from '../components/LoadingSpinner';  // компонент зі спіннером
+import React, { useState } from "react";
+import { toast } from "react-hot-toast";
+import { trainModel } from '../lib/api';
 
 const TrainPage = () => {
   const [files, setFiles] = useState([]);
   const [labels, setLabels] = useState([]);
-  const [finetune, setFinetune] = useState(true);
+  const [classNames, setClassNames] = useState([""]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
-  const handleFilesChange = e => {
-    const chosenFiles = Array.from(e.target.files);
-    setFiles(chosenFiles);
-    // Ініціалізуємо масив міток пустими значеннями (за кількістю файлів)
-    setLabels(new Array(chosenFiles.length).fill(''));
+  // Додаємо новий клас
+  const addClass = () => setClassNames([...classNames, ""]);
+  // Змінюємо назву класу
+  const handleClassName = (i, val) => {
+    const next = [...classNames];
+    next[i] = val;
+    setClassNames(next);
+  };
+  // Обробляємо вибір файлів та автоматично ініціалізуємо labels
+  const handleFilesChange = (e, classIdx) => {
+    const chosenFiles = Array.from(e.target.files).map((f) => ({
+      file: f,
+      classIdx,
+    }));
+    setFiles((fls) => [...fls, ...chosenFiles]);
+    setLabels((lbs) => [
+      ...lbs,
+      ...Array(e.target.files.length).fill(classIdx),
+    ]);
   };
 
-  const handleLabelChange = (idx, value) => {
-    const newLabels = [...labels];
-    newLabels[idx] = Number(value);
-    setLabels(newLabels);
-  };
-
-  const handleSubmit = async e => {
+  // Подаємо форму
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (files.length === 0 || labels.some(label => label === '')) {
-      alert('Будь ласка, виберіть зображення та призначте кожному клас.');
+    if (files.length === 0) {
+      toast.error("Додайте фото хоча б одного класу!");
       return;
     }
-    // Формуємо form-data з файлами та мітками
+    // Готуємо FormData
     const formData = new FormData();
-    files.forEach(file => formData.append('images', file));
-    formData.append('labels', JSON.stringify(labels));
-    formData.append('finetune', finetune);  // true/false
-
+    files.forEach(({ file }) => formData.append("images", file));
+    formData.append("labels", JSON.stringify(labels));
+    formData.append("classnames", JSON.stringify(classNames));
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/train`, formData);
+      const res = await trainModel(formData);
       setResult(res.data);
-    } catch (err) {
-      console.error('Training error:', err.response?.data || err);
-      alert('Сталася помилка під час тренування.');
+      toast.success("Тренування завершено!");
+    } catch (e) {
+      toast.error(e.response?.data?.error || "Помилка тренування");
     } finally {
       setLoading(false);
     }
   };
 
+  // UI
   return (
-    <div className="bg-gray-100 min-h-screen p-6 flex flex-col items-center">
-      <h1 className="text-3xl font-semibold text-gray-800 mb-6">Тренування CNN-моделі</h1>
-
-      {/* Форма завантаження даних для тренування */}
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-md p-6">
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-gray-700 font-medium mb-2">Виберіть навчальні зображення:</label>
-            <input 
-              type="file" 
-              multiple 
-              accept="image/*" 
-              onChange={handleFilesChange} 
-              className="w-full text-gray-700"
+    <div className="bg-gray-50 min-h-screen py-8 px-4 flex flex-col items-center">
+      <h1 className="text-3xl font-semibold mb-8 text-gray-900">
+        Тренування моделі (класифікація зображень)
+      </h1>
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-2xl bg-white rounded-xl shadow p-6 mb-10 space-y-6"
+      >
+        <h2 className="text-xl mb-2">Класи:</h2>
+        {classNames.map((name, idx) => (
+          <div key={idx} className="mb-4 flex items-center gap-2">
+            <input
+              className="border rounded p-2 flex-1"
+              type="text"
+              placeholder={`Назва класу #${idx + 1}`}
+              value={name}
+              onChange={(e) => handleClassName(idx, e.target.value)}
+              required
+            />
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="border p-1"
+              onChange={(e) => handleFilesChange(e, idx)}
             />
           </div>
-
-          {/* Поля вибору класу для кожного завантаженого зображення */}
-          {files.map((file, idx) => (
-            <div key={idx} className="mb-2 flex items-center">
-              <span className="mr-4 text-gray-600">{file.name}</span>
-              <select 
-                value={labels[idx] ?? ''} 
-                onChange={e => handleLabelChange(idx, e.target.value)} 
-                className="border border-gray-300 rounded px-2 py-1"
-                required
-              >
-                <option value="" disabled>Оберіть клас</option>
-                <option value="0">0 – Гладка</option>
-                <option value="1">1 – Шерехувата</option>
-              </select>
-            </div>
-          ))}
-
-          {/* Прапорець вибору режиму fine-tuning */}
-          <div className="mb-4 mt-4">
-            <label className="inline-flex items-center text-gray-800">
-              <input 
-                type="checkbox" 
-                className="form-checkbox h-5 w-5 text-indigo-600" 
-                checked={finetune} 
-                onChange={e => setFinetune(e.target.checked)} 
-              />
-              <span className="ml-2">Тонке налаштування всієї моделі (якщо зняти – навчати лише класифікатор)</span>
-            </label>
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading} 
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg disabled:opacity-50"
+        ))}
+        <button
+          type="button"
+          className="bg-sky-600 text-white px-3 py-2 rounded"
+          onClick={addClass}
+        >
+          + Додати клас
+        </button>
+        <div className="mt-6">
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-indigo-700 hover:bg-indigo-800 text-white px-8 py-3 rounded-lg font-semibold"
           >
-            Запустити навчання
+            {loading ? "Триває навчання..." : "Запустити тренування"}
           </button>
-        </form>
-        {loading && <LoadingSpinner />}  {/* показуємо індикатор, поки триває навчання */}
-      </div>
-
-      {/* Блок результатів після тренування */}
+        </div>
+      </form>
+      {/* Відображення результатів */}
       {result && (
-        <div className="w-full max-w-4xl mt-8 space-y-8">
-          {/* Графік порівняння точності */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Точність: Logistic vs CNN</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={[
-                  { method: 'Логістична регресія', accuracy: result.logistic_accuracy },
-                  { method: 'CNN-модель', accuracy: result.cnn_accuracy }
-                ]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="method" stroke="#888" />
-                <YAxis stroke="#888" domain={[0, 1]} tickFormatter={(v) => `${Math.round(v * 100)}%`} />
-                <Tooltip formatter={(v) => `${(v * 100).toFixed(1)}%`} />
-                <Bar dataKey="accuracy" fill="#4c51bf" />  {/* фіолетові стовпчики */}
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="max-w-2xl w-full bg-white p-6 rounded shadow space-y-6">
+          <h2 className="text-xl font-bold text-center mb-4">Результати:</h2>
+          <div className="text-lg">
+            Точність CNN:{" "}
+            <span className="font-bold">
+              {(result.cnn_accuracy * 100).toFixed(2)}%
+            </span>
           </div>
-
-          {/* Графік функції втрат по епохах */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Крива втрати під час навчання</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={result.loss_history.map((loss, i) => ({ epoch: i + 1, loss }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="epoch" stroke="#888" label={{ value: 'Епоха', position: 'insideBottomRight', offset: 0 }} />
-                <YAxis stroke="#888" />
-                <Tooltip />
-                <Line type="monotone" dataKey="loss" stroke="#38bdf8" strokeWidth={3} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Графік взаємної інформації для класичних ознак */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Взаємна інформація: класичні ознаки</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={result.features_classical.map((feat, i) => ({ feature: feat, mi: result.mi_classical[i] }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="feature" stroke="#888" />
-                <YAxis stroke="#888" />
-                <Tooltip />
-                <Bar dataKey="mi" fill="#06b6d4" />  {/* блакитні стовпчики */}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Графік взаємної інформації для глибоких ознак (топ-10) */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Взаємна інформація: глибокі ознаки (топ-10)</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={result.features_deep.map((feat, i) => ({ feature: feat, mi: result.mi_deep[i] }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="feature" stroke="#888" />
-                <YAxis stroke="#888" />
-                <Tooltip />
-                <Bar dataKey="mi" fill="#06b6d4" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="text-lg">
+            Точність Logistic Regression:{" "}
+            <span className="font-bold">
+              {(result.logistic_accuracy * 100).toFixed(2)}%
+            </span>
           </div>
         </div>
       )}

@@ -42,8 +42,8 @@ export const selectFeatures = () =>
   API.get(`${FEATURES_PATH}/select`);
 
 // Тренування моделі
-export const trainModel = () =>
-  API.get(`${FEATURES_PATH}/train`);
+export const trainModel = (formData) =>
+  API.post('/api/train', formData);
 
 // Класифікація нового зображення
 export const classifyImage = (formData) =>

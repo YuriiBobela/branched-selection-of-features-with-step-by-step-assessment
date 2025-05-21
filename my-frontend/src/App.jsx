@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import Analysis from './pages/Analysis';
 import FeatureSelection from './pages/FeatureSelection';
 import Train from './pages/Train';
+import TrainPage from './pages/TrainPage';
 import PredictPage from './pages/PredictPage';
 import { Toaster } from 'react-hot-toast';
 import AnalysisPage from './pages/AnalysisPage'; // ← додай
@@ -36,7 +37,7 @@ const App = () => (
       />
       <Route 
         path="/train" 
-        element={<ProtectedRoute><Train /></ProtectedRoute>} 
+        element={<ProtectedRoute><TrainPage/></ProtectedRoute>} 
       />
       <Route path="/predict" element={<ProtectedRoute><PredictPage /></ProtectedRoute>} />
       {/* Редірект на головну для невідомих маршрутів */}
