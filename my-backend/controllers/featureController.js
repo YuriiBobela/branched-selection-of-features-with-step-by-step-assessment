@@ -291,3 +291,49 @@ exports.classifyImage = (req, res) => {
     console.warn('⚠️ Failed to write to Python stdin (predict):', e);
   }
 };
+
+exports.branchedFeatureSelection = (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'Не надано зображень для аналізу' });
+  }
+  if (!req.body.labels) {
+    return res.status(400).json({ error: 'Не вказано мітки (labels)' });
+  }
+
+  let imagesB64, labels;
+  try {
+    imagesB64 = req.files.map(f => f.buffer.toString('base64'));
+    labels = JSON.parse(req.body.labels);
+  } catch (e) {
+    return res.status(400).json({ error: 'Неправильний формат даних' });
+  }
+
+  const payload = JSON.stringify({ images: imagesB64, labels });
+  const scriptPath = path.join(__dirname, '../scripts/main_branched_selection.py'); // Твій новий скрипт
+
+  const py = spawn('python', [scriptPath], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+  let outData = '', errData = '';
+  py.stdout.on('data', chunk => { outData += chunk.toString(); });
+  py.stderr.on('data', chunk => { errData += chunk.toString(); });
+
+  py.on('close', code => {
+    if (code !== 0) {
+      return res.status(500).json({ error: errData.trim() || 'Python script error' });
+    }
+    try {
+      const result = JSON.parse(outData);
+      // Тут за бажанням можна одразу зберігати історію у MongoDB
+      return res.json(result);
+    } catch (e) {
+      return res.status(500).json({ error: 'Неочікуваний формат відповіді' });
+    }
+  });
+
+  try {
+    py.stdin.write(payload);
+    py.stdin.end();
+  } catch (e) {
+    return res.status(500).json({ error: 'Не вдалося передати дані до Python' });
+  }
+};

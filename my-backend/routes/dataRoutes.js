@@ -13,4 +13,9 @@ router.post(
   ctrl.analyzeImages
 );
 
+router.post(
+  '/branched-feature-selection',
+  auth,
+  ctrl.branchedFeatureSelection
+);
 module.exports = router;
