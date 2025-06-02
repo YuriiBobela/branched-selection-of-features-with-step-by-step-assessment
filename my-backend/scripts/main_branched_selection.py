@@ -35,9 +35,6 @@ def extract_deep_features(imgs, n_deep=10):
     model = models.mobilenet_v2(pretrained=True)
     model.classifier = torch.nn.Identity()
     model.eval()
-    preprocess = torch.nn.Sequential(
-        torch.nn.Identity(),  # dummy
-    )
     from torchvision import transforms as T
     transform = T.Compose([
         T.ToTensor(),
@@ -59,15 +56,24 @@ def extract_deep_features(imgs, n_deep=10):
     return deep_reduced, names
 
 # ---- Декодування зображень ----
-def load_images(b64_list, size=(128, 128)):
+def load_images_and_labels(b64_list, labels, size=(128, 128)):
     imgs = []
-    for b64_str in b64_list:
-        data = base64.b64decode(b64_str)
-        arr = np.frombuffer(data, np.uint8)
-        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        img = cv2.resize(img, size)
-        imgs.append(img)
-    return imgs
+    good_labels = []
+    bad_indices = []
+    for idx, (b64_str, label) in enumerate(zip(b64_list, labels)):
+        try:
+            data = base64.b64decode(b64_str)
+            arr = np.frombuffer(data, np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is None:
+                raise ValueError("cv2.imdecode повернув None")
+            img = cv2.resize(img, size)
+            imgs.append(img)
+            good_labels.append(label)
+        except Exception as e:
+            bad_indices.append(idx)
+            print(f"Пропущено зображення #{idx}: {e}", file=sys.stderr)
+    return imgs, good_labels, bad_indices
 
 # ---- Вибір ознак ----
 def branched_selection(X, y, feature_names, max_branches=2, min_delta=0.01, max_depth=4):
@@ -128,8 +134,10 @@ def main():
         print(json.dumps({"error": "No input"}))
         return
     data = json.loads(raw)
-    images = load_images(data.get('images', []))
-    labels = np.array(data.get('labels', []))
+    images, labels, bad_indices = load_images_and_labels(data.get('images', []), data.get('labels', []))
+    if len(images) == 0:
+        print(json.dumps({"error": "Жодного коректного зображення не вдалося обробити!"}))
+        return
 
     # Виділення ознак
     X_cls = []
@@ -154,7 +162,8 @@ def main():
         "selectionTree": selection_tree,
         "featureNames": all_names,
         "classicalFeatures": cls_names,
-        "deepFeatures": deep_names
+        "deepFeatures": deep_names,
+        "skippedImages": bad_indices  # Можна й пустий масив якщо все ок
     }
     print(json.dumps(result, ensure_ascii=False), flush=True)
 

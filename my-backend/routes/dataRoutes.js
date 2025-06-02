@@ -14,8 +14,9 @@ router.post(
 );
 
 router.post(
-  '/branched-feature-selection',
+  '/branched-select',
   auth,
+  upload.array('images'),
   ctrl.branchedFeatureSelection
 );
 module.exports = router;
