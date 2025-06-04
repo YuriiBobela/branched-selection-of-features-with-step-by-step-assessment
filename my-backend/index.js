@@ -19,6 +19,7 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/data', require('./routes/dataRoutes'));
 app.use('/api/features', require('./routes/analysis'));
 app.use('/api/train', require('./routes/train'));
+app.use('/api/history', require('./routes/history.js'));
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;

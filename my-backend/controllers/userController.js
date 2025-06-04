@@ -2,7 +2,6 @@
 
 const User = require('../models/User');
 
-// Отримання профілю користувача
 exports.getProfile = async (req, res) => {
   const user = await User.findById(req.user._id).select('-password');
   if (user) {
@@ -12,14 +11,12 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// Оновлення профілю користувача
 exports.updateProfile = async (req, res) => {
   const user = await User.findById(req.user._id);
 
   if (user) {
     user.username = req.body.username || user.username;
     user.email = req.body.email || user.email;
-    // Логіка зміни пароля може бути додана за потребою
 
     const updatedUser = await user.save();
     res.json({

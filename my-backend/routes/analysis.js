@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const AnalysisResult = require('../models/AnalysisResult');
-
+const History = require('../models/History');
 const authMiddleware = require('../middleware/authMiddleware'); 
 
 
@@ -35,39 +35,5 @@ router.get('/analysis-history', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Внутрішня помилка сервера' });
   }
 });
-
-// router.post('/train', upload.array('images'), async (req, res) => {
-//   try {
-//     const imagesB64 = req.files.map(file => file.buffer.toString('base64'));
-//     const labels = JSON.parse(req.body.labels || "[]");
-//     const finetune = req.body.finetune === 'true';  
-
-//     const payload = { images: imagesB64, labels: labels, finetune: finetune };
-//     const py = spawn('python', ['scripts/train_model.py']);
-//     py.stdin.write(JSON.stringify(payload));
-//     py.stdin.end();
-
-//     let output = "";
-//     py.stdout.on('data', chunk => output += chunk.toString());
-//     py.stderr.on('data', err => console.error("Train script error:", err.toString()));
-//     py.stdout.on('close', async () => {
-//       if (!output) {
-//         return res.status(500).json({ error: "No output from training script" });
-//       }
-//       const result = JSON.parse(output);
-//       await Model.deleteMany({});
-//       await Model.create({
-//         date: new Date(),
-//         accuracy: result.cnn_accuracy,
-//         architecture: "MobileNetV2",
-//         path: result.model_path
-//       });
-//       return res.json(result);
-//     });
-//   } catch (err) {
-//     console.error("Training API error:", err);
-//     res.status(500).json({ error: err.message || "Training failed" });
-//   }
-// });
 
 module.exports = router;

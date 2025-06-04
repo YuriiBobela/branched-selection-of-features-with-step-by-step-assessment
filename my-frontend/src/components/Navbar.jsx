@@ -29,11 +29,8 @@ const NavBar = () => {
           <NavLink to="/analysis" className={linkClasses}>
             Аналіз
           </NavLink>
-          <NavLink to="/train" className={linkClasses}>
-            Тренування
-          </NavLink>
-          <NavLink to="/predict" className={linkClasses}>
-          Передбачення
+          <NavLink to="/analysis/history" className={linkClasses}>
+          Історія
           </NavLink>
           <button 
             onClick={handleLogout} 
