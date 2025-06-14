@@ -6,12 +6,12 @@ const upload  = require('../middleware/upload');
 const ctrl    = require('../controllers/featureController');
 
 // POST /api/data/analyze
-router.post(
-  '/analyze',
-  auth,
-  upload.array('images'),
-  ctrl.analyzeImages
-);
+// router.post(
+//   '/analyze',
+//   auth,
+//   upload.array('images'),
+//   ctrl.analyzeImages
+// );
 
 router.post(
   '/branched-select',
