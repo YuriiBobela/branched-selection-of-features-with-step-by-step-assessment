@@ -11,10 +11,10 @@ const Login = () => {
   const handleLogin = async (formData) => {
     try {
       setError('');
-      await login(formData);            // викликаємо action login з zustand
+      await login(formData);            
       navigate('/analysis', { replace: true });
     } catch (e) {
-      // Отримуємо повідомлення про помилку (якщо є з бекенду)
+
       const msg = e.response?.data?.error || e.message || 'Помилка входу';
       setError(msg);
     }

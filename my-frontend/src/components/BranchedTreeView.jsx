@@ -5,7 +5,6 @@ import Tree from "react-d3-tree";
 export default function BranchedTreeD3({ data }) {
   const treeContainer = useRef(null);
 
-  // Центруємо горизонтально
   useEffect(() => {
     if (treeContainer.current) {
       treeContainer.current.scrollLeft = 200;

@@ -11,7 +11,7 @@ const Register = () => {
   const handleRegister = async (formData) => {
     try {
       setError('');
-      await register(formData);         // викликаємо action register з zustand
+      await register(formData);         
       navigate('/analysis', { replace: true });
     } catch (e) {
       const msg = e.response?.data?.error || e.message || 'Помилка реєстрації';
@@ -21,7 +21,6 @@ const Register = () => {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-50">
-      {/* isRegister=true показує поле "Ім'я користувача" у формі */}
       <AuthForm onSubmit={handleRegister} isRegister={true} errorMessage={error} />
     </div>
   );

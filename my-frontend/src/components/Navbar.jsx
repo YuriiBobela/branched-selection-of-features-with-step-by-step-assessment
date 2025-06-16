@@ -9,7 +9,7 @@ const NavBar = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/'); // після виходу перенаправляємо на головну
+    navigate('/'); 
   };
 
   const linkClasses = ({ isActive }) =>
@@ -19,11 +19,9 @@ const NavBar = () => {
 
   return (
     <nav className="bg-white shadow-md px-6 py-4 flex justify-between items-center">
-      {/* Логотип / назва проєкту */}
       <Link to="/" className="text-2xl font-bold text-indigo-600">
         MyProject
       </Link>
-      {/* Навігаційні посилання */}
       {token ? (
         <div>
           <NavLink to="/analysis" className={linkClasses}>

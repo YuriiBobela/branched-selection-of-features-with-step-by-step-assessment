@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import BranchedTreeD3 from '../components/BranchedTreeView';
 import { toast } from 'react-hot-toast';
 import { branchedFeatureSelection } from '../lib/api';
-// Функція для конвертації selectionTree до формату, який приймає react-d3-tree
+
 function toD3Tree(node, parentAcc = null) {
   const label = node.feature
     ? `${node.feature} (${(node.accuracy * 100).toFixed(1)}%)`

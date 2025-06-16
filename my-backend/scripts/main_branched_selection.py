@@ -6,7 +6,6 @@ import cv2
 import torch
 import torchvision.models as models
 from sklearn.decomposition import PCA
-from sklearn.feature_selection import mutual_info_classif
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from scipy.stats import entropy
